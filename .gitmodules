@@ -1,0 +1,24 @@
+[submodule "sources/Pmoves-Claude-skills"]
+	path = sources/Pmoves-Claude-skills
+	url = https://github.com/POWERFULMOVES/Pmoves-Claude-skills.git
+	branch = PMOVES.AI-Edition-Hardened
+[submodule "sources/Pmoves-Minimax-skills"]
+	path = sources/Pmoves-Minimax-skills
+	url = https://github.com/POWERFULMOVES/Pmoves-Minimax-skills.git
+	branch = PMOVES.AI-Edition-Hardened
+[submodule "sources/PMOVES-agent-sandbox-skill"]
+	path = sources/PMOVES-agent-sandbox-skill
+	url = https://github.com/POWERFULMOVES/PMOVES-agent-sandbox-skill.git
+	branch = main
+[submodule "sources/pmoves-fork-repository-skill"]
+	path = sources/pmoves-fork-repository-skill
+	url = https://github.com/POWERFULMOVES/pmoves-fork-repository-skill.git
+	branch = main
+[submodule "sources/PMOVES-awesome-agent-skills"]
+	path = sources/PMOVES-awesome-agent-skills
+	url = https://github.com/POWERFULMOVES/PMOVES-awesome-agent-skills.git
+	branch = main
+[submodule "sources/Pmoves-claude-d3js-skill"]
+	path = sources/Pmoves-claude-d3js-skill
+	url = https://github.com/POWERFULMOVES/Pmoves-claude-d3js-skill.git
+	branch = main
