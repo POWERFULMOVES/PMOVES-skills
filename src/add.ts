@@ -1197,7 +1197,7 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       // Try the blob-based fast install for GitHub sources; skip for --full-depth.
       // Eligible per repo (a BLOB_ALLOWED_REPOS entry = self-hosted download URL) or
       // per owner (BLOB_ALLOWED_OWNERS = all their repos, skills.sh-hosted).
-      const BLOB_ALLOWED_OWNERS = ['vercel', 'vercel-labs', 'heygen-com'];
+      const BLOB_ALLOWED_OWNERS = ['vercel', 'vercel-labs', 'heygen-com', 'remotion-dev'];
       const ownerRepo = getOwnerRepo(parsed);
       const owner = ownerRepo?.split('/')[0]?.toLowerCase();
       const isSelfHostedRepo =
