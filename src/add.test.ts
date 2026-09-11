@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { execFileSync } from 'child_process';
-import { existsSync, rmSync, mkdirSync, writeFileSync } from 'fs';
+import { existsSync, rmSync, mkdirSync, writeFileSync, lstatSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { runCli, stripAnsi } from './test-utils.ts';
@@ -121,6 +121,103 @@ Instructions here.
     expect(result.stdout).toContain('my-skill');
     expect(result.stdout).toContain('Done!');
     expect(result.exitCode).toBe(0);
+  });
+
+  it('creates the project symlink for an explicitly selected non-universal agent', () => {
+    const sourceDir = join(testDir, 'source');
+    const skillDir = join(sourceDir, 'skills', 'kiro-skill');
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(
+      join(skillDir, 'SKILL.md'),
+      `---
+name: kiro-skill
+description: A Kiro test skill
+---
+
+# Kiro Skill
+`
+    );
+
+    const projectDir = join(testDir, 'project');
+    mkdirSync(join(projectDir, '.claude'), { recursive: true });
+
+    const result = runCli(
+      ['add', sourceDir, '-y', '--agent', 'kiro-cli', 'claude-code'],
+      projectDir,
+      noDetectedAgentEnv
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(lstatSync(join(projectDir, '.kiro', 'skills', 'kiro-skill')).isSymbolicLink()).toBe(
+      true
+    );
+    expect(existsSync(join(projectDir, '.agents', 'skills', 'kiro-skill'))).toBe(true);
+    expect(result.stdout).toContain('symlinked: Kiro CLI');
+  });
+
+  it('reports a skipped project symlink for an automatically selected agent', () => {
+    const sourceDir = join(testDir, 'source');
+    const skillDir = join(sourceDir, 'skills', 'augment-skill');
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(
+      join(skillDir, 'SKILL.md'),
+      `---
+name: augment-skill
+description: An Augment test skill
+---
+
+# Augment Skill
+`
+    );
+
+    const projectDir = join(testDir, 'project');
+    const isolatedHome = join(testDir, 'home');
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(join(isolatedHome, '.augment'), { recursive: true });
+
+    const result = runCli(['add', sourceDir, '-y'], projectDir, {
+      ...noDetectedAgentEnv,
+      HOME: isolatedHome,
+      USERPROFILE: isolatedHome,
+      AUGMENT_AGENT: '1',
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(existsSync(join(projectDir, '.augment'))).toBe(false);
+    expect(result.stdout).toContain('skipped: Augment (project directory not found)');
+  });
+
+  it('omits an automatically skipped agent from JSON install results', () => {
+    const sourceDir = join(testDir, 'source');
+    const skillDir = join(sourceDir, 'skills', 'augment-json-skill');
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(
+      join(skillDir, 'SKILL.md'),
+      `---
+name: augment-json-skill
+description: An Augment JSON test skill
+---
+
+# Augment JSON Skill
+`
+    );
+
+    const projectDir = join(testDir, 'project');
+    const isolatedHome = join(testDir, 'home');
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(join(isolatedHome, '.augment'), { recursive: true });
+
+    const result = runCli(['add', sourceDir, '-y', '--json'], projectDir, {
+      ...noDetectedAgentEnv,
+      HOME: isolatedHome,
+      USERPROFILE: isolatedHome,
+      AUGMENT_AGENT: '1',
+    });
+
+    expect(result.exitCode).toBe(0);
+    const parsed = JSON.parse(result.stdout.trim());
+    expect(parsed[0].status).toBe('installed');
+    expect(parsed[0].agents).not.toContain('Augment');
   });
 
   it('should exit non-zero when the agent prompt cannot run without a TTY', () => {

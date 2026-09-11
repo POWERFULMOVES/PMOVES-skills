@@ -369,6 +369,7 @@ function buildResultLines(
     agent: string;
     symlinkFailed?: boolean;
     skipped?: boolean;
+    skipReason?: string;
   }>,
   targetAgents: AgentType[]
 ): string[] {
@@ -383,6 +384,14 @@ function buildResultLines(
     .filter((r) => !r.symlinkFailed && !r.skipped && !universal.includes(r.agent))
     .map((r) => r.agent);
   const failedSymlinks = results.filter((r) => r.symlinkFailed && !r.skipped).map((r) => r.agent);
+  const skippedSymlinks = results
+    .filter(
+      (r) =>
+        r.skipped &&
+        r.skipReason === 'missing-agent-project-directory' &&
+        symlinkAgents.includes(r.agent)
+    )
+    .map((r) => r.agent);
 
   if (universal.length > 0) {
     lines.push(`  ${pc.green('universal:')} ${formatList(universal)}`);
@@ -392,6 +401,11 @@ function buildResultLines(
   }
   if (failedSymlinks.length > 0) {
     lines.push(`  ${pc.yellow('copied:')} ${formatList(failedSymlinks)}`);
+  }
+  if (skippedSymlinks.length > 0) {
+    lines.push(
+      `  ${pc.yellow('skipped:')} ${formatList(skippedSymlinks)} ${pc.dim('(project directory not found)')}`
+    );
   }
 
   return lines;
@@ -1168,6 +1182,12 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
     emitJsonAndExit(1, 'Missing required argument: source');
   }
 
+  // Capture command-line intent before agent-context detection populates
+  // options.agent with automatic defaults.
+  const explicitlySelectedAgents = new Set<AgentType>(
+    options.agent?.includes('*') ? [] : ((options.agent as AgentType[] | undefined) ?? [])
+  );
+
   // --all implies --skill '*' and --agent '*' and -y
   if (options.all) {
     options.skill = ['*'];
@@ -1572,6 +1592,7 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
 
         if (useEve) {
           targetAgents = ['eve'];
+          if (!options.yes) explicitlySelectedAgents.add('eve');
           p.log.info(`Installing to: ${pc.cyan(EVE_AGENT_LABEL)}`);
         } else {
           const selected = await selectAgentsInteractive({ global: options.global });
@@ -1582,6 +1603,7 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
           }
 
           targetAgents = selected as AgentType[];
+          for (const agent of targetAgents) explicitlySelectedAgents.add(agent);
         }
       } else if (installedAgents.length === 0) {
         if (options.yes) {
@@ -1609,6 +1631,7 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
           }
 
           targetAgents = selected as AgentType[];
+          for (const agent of targetAgents) explicitlySelectedAgents.add(agent);
         }
       } else if (installedAgents.length === 1 || options.yes) {
         // Auto-select detected agents + ensure universal agents are included
@@ -1630,12 +1653,14 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
         }
 
         targetAgents = selected as AgentType[];
+        for (const agent of targetAgents) explicitlySelectedAgents.add(agent);
       }
     }
 
     // An explicit --subagent flag implies the user wants to target Eve.
-    if (options.subagent && options.subagent.length > 0 && !targetAgents.includes('eve')) {
-      targetAgents = [...targetAgents, 'eve'];
+    if (options.subagent && options.subagent.length > 0) {
+      explicitlySelectedAgents.add('eve');
+      if (!targetAgents.includes('eve')) targetAgents = [...targetAgents, 'eve'];
     }
 
     // Eve supports subagents, each with their own skills directory at
@@ -1882,6 +1907,8 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       canonicalPath?: string;
       mode: InstallMode;
       symlinkFailed?: boolean;
+      skipped?: boolean;
+      skipReason?: string;
       error?: string;
       pluginName?: string;
     }[] = [];
@@ -1896,7 +1923,12 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
           result = await installBlobSkillForAgent(
             { installName: blobSkill.name, files: blobSkill.files },
             agent,
-            { global: installGlobally, mode: installMode, eveSubagent: subagent }
+            {
+              global: installGlobally,
+              mode: installMode,
+              eveSubagent: subagent,
+              createMissingAgentRoot: explicitlySelectedAgents.has(agent),
+            }
           );
         } else {
           // Disk-based install: copy from cloned/local directory.
@@ -1908,6 +1940,7 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
             global: installGlobally,
             mode: installMode,
             eveSubagent: subagent,
+            createMissingAgentRoot: explicitlySelectedAgents.has(agent),
           });
         }
         results.push({
@@ -2118,7 +2151,7 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
           hash: installedSkillHashes.get(name) ?? null,
           path: skillResults[0]?.canonicalPath ?? skillResults[0]?.path,
           scope: installGlobally ? 'global' : 'project',
-          agents: skillResults.map((r) => r.agent),
+          agents: skillResults.filter((r) => !r.skipped).map((r) => r.agent),
           mode: skillResults[0]?.mode ?? installMode,
           security: buildJsonSecurity(auditDataForJson, name, ownerRepoForAudit),
         });

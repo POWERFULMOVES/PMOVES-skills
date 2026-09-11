@@ -101,6 +101,8 @@ export interface AgentConfig {
   showInUniversalList?: boolean;
   /** Whether to display this universal agent in the interactive locked section. Defaults to true. */
   showInUniversalPrompt?: boolean;
+  /** Whether automatic project installs may create this agent's missing skills root. */
+  createProjectSkillsDirByDefault?: boolean;
 }
 
 export interface ParsedSource {
