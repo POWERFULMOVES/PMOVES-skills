@@ -1333,12 +1333,14 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       // Try the blob-based fast install for GitHub sources; skip for --full-depth.
       // Eligible per repo (a BLOB_ALLOWED_REPOS entry = self-hosted download URL) or
       // per owner (BLOB_ALLOWED_OWNERS = all their repos, skills.sh-hosted).
+      let attemptedBlobInstall = false;
       const BLOB_ALLOWED_OWNERS = ['vercel', 'vercel-labs', 'heygen-com', 'remotion-dev'];
       const ownerRepo = getOwnerRepo(parsed);
       const owner = ownerRepo?.split('/')[0]?.toLowerCase();
       const isSelfHostedRepo =
         !!ownerRepo && Object.hasOwn(BLOB_ALLOWED_REPOS, ownerRepo.toLowerCase());
       if (ownerRepo && owner && (isSelfHostedRepo || BLOB_ALLOWED_OWNERS.includes(owner))) {
+        attemptedBlobInstall = true;
         spinner.start('Fetching skills…');
         blobResult = await tryBlobInstall(ownerRepo, {
           subpath: parsed.subpath,
@@ -1347,9 +1349,6 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
           getToken: getGitHubToken,
           includeInternal,
         });
-        if (!blobResult) {
-          spinner.stop(pc.dim('Falling back to clone…'));
-        }
       }
 
       if (blobResult) {
@@ -1357,7 +1356,11 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
         spinner.stop(`Found ${pc.green(skills.length)} skill${skills.length > 1 ? 's' : ''}`);
       } else {
         // Blob failed — fall back to git clone
-        spinner.start('Cloning repository…');
+        if (attemptedBlobInstall) {
+          spinner.message('Cloning repository…');
+        } else {
+          spinner.start('Cloning repository…');
+        }
         tempDir = await cloneRepo(parsed.url, parsed.ref);
         spinner.stop('Repository cloned');
 
