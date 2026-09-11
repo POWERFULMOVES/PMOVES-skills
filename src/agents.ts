@@ -13,6 +13,7 @@ const vibeHome = process.env.VIBE_HOME?.trim() || join(home, '.vibe');
 const hermesHome = process.env.HERMES_HOME?.trim() || join(home, '.hermes');
 const autohandHome = process.env.AUTOHAND_HOME?.trim() || join(home, '.autohand');
 const grokHome = process.env.GROK_HOME?.trim() || join(home, '.grok');
+const sarvamHome = process.env.SARVAM_HOME?.trim() || join(home, '.sarvam');
 const zedAppDataHome = process.env.APPDATA?.trim();
 const zedFlatpakConfigHome = process.env.FLATPAK_XDG_CONFIG_HOME?.trim();
 
@@ -67,6 +68,15 @@ export function isMiniMaxCodeInstalled(
   return pathExists(join(homeDir, '.minimax')) || pathExists('/Applications/MiniMax Code.app');
 }
 
+export function isPositAssistantInstalled(
+  homeDir = home,
+  pathExists: (path: string) => boolean = existsSync
+) {
+  // ~/.positai is the pre-rename config dir, still present on installs
+  // that haven't launched a current version yet.
+  return pathExists(join(homeDir, '.posit/assistant')) || pathExists(join(homeDir, '.positai'));
+}
+
 export const agents: Record<AgentType, AgentConfig> = {
   'aider-desk': {
     name: 'aider-desk',
@@ -91,6 +101,7 @@ export const agents: Record<AgentType, AgentConfig> = {
     displayName: 'Antigravity',
     skillsDir: '.agents/skills',
     globalSkillsDir: join(home, '.gemini/antigravity/skills'),
+    showInUniversalPrompt: false,
     detectInstalled: async () => {
       return existsSync(join(home, '.gemini/antigravity'));
     },
@@ -100,6 +111,7 @@ export const agents: Record<AgentType, AgentConfig> = {
     displayName: 'Antigravity CLI',
     skillsDir: '.agents/skills',
     globalSkillsDir: join(home, '.gemini/antigravity-cli/skills'),
+    showInUniversalPrompt: false,
     detectInstalled: async () => {
       return existsSync(join(home, '.gemini/antigravity-cli'));
     },
@@ -266,6 +278,7 @@ export const agents: Record<AgentType, AgentConfig> = {
     displayName: 'Deep Agents',
     skillsDir: '.agents/skills',
     globalSkillsDir: join(home, '.deepagents/agent/skills'),
+    showInUniversalPrompt: false,
     detectInstalled: async () => {
       return existsSync(join(home, '.deepagents'));
     },
@@ -292,7 +305,11 @@ export const agents: Record<AgentType, AgentConfig> = {
   droid: {
     name: 'droid',
     displayName: 'Droid',
-    skillsDir: '.factory/skills',
+    // Droid reads .agents/skills and ~/.agents/skills as compatibility
+    // locations, so installing there avoids defining the same skill twice.
+    // globalSkillsDir stays on ~/.factory/skills so `remove` still cleans up
+    // skills placed there by earlier versions.
+    skillsDir: '.agents/skills',
     globalSkillsDir: join(home, '.factory/skills'),
     detectInstalled: async () => {
       return existsSync(join(home, '.factory'));
@@ -327,6 +344,15 @@ export const agents: Record<AgentType, AgentConfig> = {
     globalSkillsDir: join(home, '.forge/skills'),
     detectInstalled: async () => {
       return existsSync(join(home, '.forge'));
+    },
+  },
+  fx: {
+    name: 'fx',
+    displayName: 'fx',
+    skillsDir: '.fx/skills',
+    globalSkillsDir: join(home, '.fx/skills'),
+    detectInstalled: async () => {
+      return existsSync(join(home, '.fx'));
     },
   },
   'gemini-cli': {
@@ -413,10 +439,12 @@ export const agents: Record<AgentType, AgentConfig> = {
   kilo: {
     name: 'kilo',
     displayName: 'Kilo Code',
-    skillsDir: '.kilocode/skills',
-    globalSkillsDir: join(home, '.kilocode/skills'),
+    skillsDir: '.agents/skills',
+    globalSkillsDir: join(home, '.kilo/skills'),
     detectInstalled: async () => {
-      return existsSync(join(home, '.kilocode'));
+      // `.kilocode` is the legacy config directory, kept here so existing
+      // installs are still detected.
+      return existsSync(join(home, '.kilo')) || existsSync(join(home, '.kilocode'));
     },
   },
   kimchi: {
@@ -555,6 +583,15 @@ export const agents: Record<AgentType, AgentConfig> = {
       return existsSync(join(home, '.pi/agent'));
     },
   },
+  'posit-assistant': {
+    name: 'posit-assistant',
+    displayName: 'Posit Assistant',
+    skillsDir: '.posit/assistant/skills',
+    globalSkillsDir: join(home, '.posit/assistant/skills'),
+    detectInstalled: async () => {
+      return isPositAssistantInstalled();
+    },
+  },
   qoder: {
     name: 'qoder',
     displayName: 'Qoder',
@@ -617,6 +654,16 @@ export const agents: Record<AgentType, AgentConfig> = {
     globalSkillsDir: join(home, '.roo/skills'),
     detectInstalled: async () => {
       return existsSync(join(home, '.roo'));
+    },
+  },
+  'sarvam-code': {
+    name: 'sarvam-code',
+    displayName: 'Sarvam Code',
+    skillsDir: '.agents/skills',
+    globalSkillsDir: join(home, '.agents/skills'),
+    showInUniversalPrompt: false,
+    detectInstalled: async () => {
+      return existsSync(sarvamHome);
     },
   },
   'tabnine-cli': {

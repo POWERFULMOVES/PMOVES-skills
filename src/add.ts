@@ -36,6 +36,7 @@ import { detectAgent, getAgentType } from './detect-agent.ts';
 import {
   wellKnownProvider,
   computeWellKnownSkillDigest,
+  WellKnownScopeNotFoundError,
   type WellKnownSkill,
 } from './providers/index.ts';
 import { downloadSource } from './download-source.ts';
@@ -397,21 +398,23 @@ function buildResultLines(
 }
 
 /**
- * Wrapper around p.multiselect that adds a hint for keyboard usage.
- * Accepts options with required labels (matching our usage pattern).
+ * Exit after an installation prompt was cancelled before anything was installed.
+ *
+ * Without a TTY the prompt cannot collect input at all: stdin EOF cancels it
+ * immediately. Exiting 0 there reports success to scripts and CI even though
+ * nothing was installed, so exit non-zero and point at the non-interactive
+ * flags instead. A deliberate interactive cancel still exits 0.
  */
-function multiselect<Value>(opts: {
-  message: string;
-  options: Array<{ value: Value; label: string; hint?: string }>;
-  initialValues?: Value[];
-  required?: boolean;
-}) {
-  return p.multiselect({
-    ...opts,
-    // Cast is safe: our options always have labels, which satisfies p.Option requirements
-    options: opts.options as p.Option<Value>[],
-    message: `${opts.message} ${pc.dim('(space to toggle)')}`,
-  }) as Promise<Value[] | symbol>;
+function exitInstallationCancelled(): never {
+  p.cancel('Installation cancelled');
+  if (!process.stdin.isTTY) {
+    console.error(
+      'Interactive prompt required but stdin is not a TTY. Nothing was installed. ' +
+        `Use --agent <name> (or --agent '*') and -y to run non-interactively.`
+    );
+    process.exit(1);
+  }
+  process.exit(0);
 }
 
 /**
@@ -619,7 +622,20 @@ async function handleWellKnownSkills(
   spinner.start('Discovering skills from well-known endpoint...');
 
   // Fetch all skills from the well-known endpoint
-  const skills = await wellKnownProvider.fetchAllSkills(url).catch(() => []);
+  let skills: WellKnownSkill[] = [];
+  try {
+    skills = await wellKnownProvider.fetchAllSkills(url, {
+      includeInternal: Boolean(
+        options.skill && options.skill.length > 0 && !options.skill.includes('*')
+      ),
+    });
+  } catch (error) {
+    if (error instanceof WellKnownScopeNotFoundError) {
+      spinner.stop(pc.red('No matching skills'));
+      p.log.error(error.message);
+      process.exit(1);
+    }
+  }
 
   if (skills.length === 0) {
     spinner.stop(pc.dim('No well-known skills found; trying direct download...'));
@@ -691,16 +707,17 @@ async function handleWellKnownSkills(
       hint: s.description.length > 60 ? s.description.slice(0, 57) + '…' : s.description,
     }));
 
-    const selected = await multiselect({
+    const selected = await searchMultiselect({
       message: 'Select skills to install',
-      options: skillChoices,
-      initialValues: isSkillsShPackUrl(url) ? skills : undefined,
+      items: skillChoices,
+      initialSelected: isSkillsShPackUrl(url) ? skills : undefined,
       required: true,
+      maxVisible: 20,
+      selectAll: true,
     });
 
-    if (p.isCancel(selected)) {
-      p.cancel('Installation cancelled');
-      process.exit(0);
+    if (isCancelled(selected)) {
+      exitInstallationCancelled();
     }
 
     selectedSkills = selected as WellKnownSkill[];
@@ -748,9 +765,8 @@ async function handleWellKnownSkills(
           allAgentChoices
         );
 
-        if (p.isCancel(selected)) {
-          p.cancel('Installation cancelled');
-          process.exit(0);
+        if (isCancelled(selected)) {
+          exitInstallationCancelled();
         }
 
         targetAgents = selected as AgentType[];
@@ -769,9 +785,8 @@ async function handleWellKnownSkills(
     } else {
       const selected = await selectAgentsInteractive({ global: options.global });
 
-      if (p.isCancel(selected)) {
-        p.cancel('Installation cancelled');
-        process.exit(0);
+      if (isCancelled(selected)) {
+        exitInstallationCancelled();
       }
 
       targetAgents = selected as AgentType[];
@@ -801,8 +816,7 @@ async function handleWellKnownSkills(
     });
 
     if (p.isCancel(scope)) {
-      p.cancel('Installation cancelled');
-      process.exit(0);
+      exitInstallationCancelled();
     }
 
     installGlobally = scope as boolean;
@@ -829,8 +843,7 @@ async function handleWellKnownSkills(
     });
 
     if (p.isCancel(modeChoice)) {
-      p.cancel('Installation cancelled');
-      process.exit(0);
+      exitInstallationCancelled();
     }
 
     installMode = modeChoice as InstallMode;
@@ -891,8 +904,7 @@ async function handleWellKnownSkills(
     const confirmed = await p.confirm({ message: 'Proceed with installation?' });
 
     if (p.isCancel(confirmed) || !confirmed) {
-      p.cancel('Installation cancelled');
-      process.exit(0);
+      exitInstallationCancelled();
     }
   }
 
@@ -1252,8 +1264,14 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
     }
 
     // Include internal skills when a specific skill is explicitly requested
-    // (via --skill or @skill syntax)
-    const includeInternal = !!(options.skill && options.skill.length > 0);
+    // (via --skill or @skill syntax). The '*' wildcard is a bulk request, not
+    // an explicit one, so internal skills stay hidden from it unless
+    // INSTALL_INTERNAL_SKILLS is set.
+    const includeInternal = !!(
+      options.skill &&
+      options.skill.length > 0 &&
+      !options.skill.includes('*')
+    );
 
     let skills: Skill[];
     let blobResult: BlobInstallResult | null = null;
@@ -1482,12 +1500,12 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
         showDetail: true,
         showSelectedSummary: false,
         selectGroups: hasGroups,
+        selectAll: true,
       });
 
       if (isCancelled(selected)) {
-        p.cancel('Installation cancelled');
         await cleanup(tempDir);
-        emitJsonAndExit(0);
+        exitInstallationCancelled();
       }
 
       selectedSkills = selected as Skill[];
@@ -1541,9 +1559,8 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
             });
 
         if (p.isCancel(useEve)) {
-          p.cancel('Installation cancelled');
           await cleanup(tempDir);
-          emitJsonAndExit(0);
+          exitInstallationCancelled();
         }
 
         if (useEve) {
@@ -1552,10 +1569,9 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
         } else {
           const selected = await selectAgentsInteractive({ global: options.global });
 
-          if (p.isCancel(selected)) {
-            p.cancel('Installation cancelled');
+          if (isCancelled(selected)) {
             await cleanup(tempDir);
-            emitJsonAndExit(0);
+            exitInstallationCancelled();
           }
 
           targetAgents = selected as AgentType[];
@@ -1580,10 +1596,9 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
             allAgentChoices
           );
 
-          if (p.isCancel(selected)) {
-            p.cancel('Installation cancelled');
+          if (isCancelled(selected)) {
             await cleanup(tempDir);
-            emitJsonAndExit(0);
+            exitInstallationCancelled();
           }
 
           targetAgents = selected as AgentType[];
@@ -1602,10 +1617,9 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       } else {
         const selected = await selectAgentsInteractive({ global: options.global });
 
-        if (p.isCancel(selected)) {
-          p.cancel('Installation cancelled');
+        if (isCancelled(selected)) {
           await cleanup(tempDir);
-          emitJsonAndExit(0);
+          exitInstallationCancelled();
         }
 
         targetAgents = selected as AgentType[];
@@ -1647,9 +1661,8 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
         });
 
         if (p.isCancel(selectedSubagents)) {
-          p.cancel('Installation cancelled');
           await cleanup(tempDir);
-          emitJsonAndExit(0);
+          exitInstallationCancelled();
         }
 
         eveSubagentTargets = (selectedSubagents as string[]).map((s) => (s === '' ? undefined : s));
@@ -1681,9 +1694,8 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       });
 
       if (p.isCancel(scope)) {
-        p.cancel('Installation cancelled');
         await cleanup(tempDir);
-        emitJsonAndExit(0);
+        exitInstallationCancelled();
       }
 
       installGlobally = scope as boolean;
@@ -1717,9 +1729,8 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       });
 
       if (p.isCancel(modeChoice)) {
-        p.cancel('Installation cancelled');
         await cleanup(tempDir);
-        emitJsonAndExit(0);
+        exitInstallationCancelled();
       }
 
       installMode = modeChoice as InstallMode;
@@ -1849,9 +1860,8 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
       const confirmed = await p.confirm({ message: 'Proceed with installation?' });
 
       if (p.isCancel(confirmed) || !confirmed) {
-        p.cancel('Installation cancelled');
         await cleanup(tempDir);
-        emitJsonAndExit(0);
+        exitInstallationCancelled();
       }
     }
 
