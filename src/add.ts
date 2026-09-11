@@ -1099,7 +1099,9 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
   const originalStdoutWrite = process.stdout.write;
   let stdoutSuppressed = false;
   if (jsonMode) {
-    process.stdout.write = (() => true) as typeof process.stdout.write;
+    // Keep stdout reserved for the JSON value while preserving human-facing
+    // progress and diagnostics on stderr, as promised by the command contract.
+    process.stdout.write = process.stderr.write.bind(process.stderr) as typeof process.stdout.write;
     stdoutSuppressed = true;
   }
 
@@ -1136,10 +1138,11 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
     process.exit(code);
   };
 
+  const emitJsonOnExit = (): void => emitJson();
   if (jsonMode) {
     // Safety net for exit paths outside this function (e.g. nested helpers):
     // guarantee stdout carries one parseable array even then.
-    process.once('exit', emitJson);
+    process.once('exit', emitJsonOnExit);
   }
 
   const showInstallTip = (): void => {
@@ -1189,6 +1192,10 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
   // non-interactive mode instead of hanging on (or cancelling) a prompt.
   if (jsonMode && !options.yes) {
     emitJsonAndExit(1, 'The --json flag requires --yes (or --all) to run non-interactively.');
+  }
+
+  if (jsonMode && options.list) {
+    emitJsonAndExit(1, 'The --json flag cannot be combined with --list.');
   }
 
   console.log();
@@ -2117,7 +2124,9 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
         });
       }
       emitJson();
-      if (failed.length > 0) process.exitCode = 1;
+      if (failed.length > 0 || jsonResults.some((result) => result.status === 'skipped')) {
+        process.exitCode = 1;
+      }
       return; // the finally block handles tempDir cleanup
     }
 
@@ -2252,6 +2261,7 @@ export async function runAdd(args: string[], options: AddOptions = {}): Promise<
           : 'Unknown error occurred';
     emitJsonAndExit(1, errorMessage);
   } finally {
+    if (jsonMode) process.removeListener('exit', emitJsonOnExit);
     restoreStdout();
     await cleanup(tempDir);
   }

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { execFileSync } from 'child_process';
 import { existsSync, rmSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -398,6 +399,7 @@ description: Test
       // No ANSI codes, no banner, no clack boxes on stdout
       expect(result.stdout).not.toMatch(/\x1b\[/);
       expect(result.stdout).not.toContain('Installation Summary');
+      expect(stripAnsi(result.stderr)).toContain('Installation Summary');
     });
 
     it('should output one entry per skill for multi-skill installs', () => {
@@ -454,7 +456,7 @@ description: Test
         noDetectedAgentEnv
       );
 
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode).toBe(1);
       const parsed = JSON.parse(result.stdout.trim());
       expect(parsed.length).toBe(2);
       const skipped = parsed.find((e: any) => e.name === 'no-such-skill');
@@ -462,6 +464,61 @@ description: Test
       expect(skipped.reason).toContain('No matching skill');
       const installed = parsed.find((e: any) => e.name === 'skill-one');
       expect(installed.status).toBe('installed');
+    });
+
+    it('should reject --json combined with --list', () => {
+      const sourceDir = join(testDir, 'source');
+      writeSkill(sourceDir, 'skill-one');
+
+      const result = runCli(
+        ['add', sourceDir, '--list', '--json', '-y'],
+        testDir,
+        noDetectedAgentEnv
+      );
+
+      expect(result.exitCode).toBe(1);
+      const parsed = JSON.parse(result.stdout.trim());
+      expect(parsed).toEqual([
+        {
+          status: 'failed',
+          error: 'The --json flag cannot be combined with --list.',
+        },
+      ]);
+      expect(result.stderr).toContain('cannot be combined with --list');
+    });
+
+    it('should install from a generic Git URL in JSON mode', () => {
+      const sourceDir = join(testDir, 'source.git');
+      const projectDir = join(testDir, 'project');
+      writeSkill(sourceDir, 'git-json-skill');
+      mkdirSync(projectDir, { recursive: true });
+      execFileSync('git', ['init'], { cwd: sourceDir, stdio: 'ignore' });
+      execFileSync('git', ['config', 'user.email', 'skills-test@example.com'], {
+        cwd: sourceDir,
+      });
+      execFileSync('git', ['config', 'user.name', 'Skills Test'], { cwd: sourceDir });
+      execFileSync('git', ['add', '.'], { cwd: sourceDir });
+      execFileSync('git', ['commit', '-m', 'add test skill'], {
+        cwd: sourceDir,
+        stdio: 'ignore',
+      });
+
+      const sourceUrl = `file://${sourceDir}`;
+      const result = runCli(
+        ['add', sourceUrl, '-y', '--agent', 'claude-code', '--json'],
+        projectDir,
+        noDetectedAgentEnv
+      );
+
+      expect(result.exitCode).toBe(0);
+      const parsed = JSON.parse(result.stdout.trim());
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0]).toMatchObject({
+        name: 'git-json-skill',
+        status: 'installed',
+        source: sourceUrl,
+      });
+      expect(parsed[0].hash).toMatch(/^[a-f0-9]{64}$/);
     });
 
     it('should emit a failed entry and parseable array for a bad source', () => {
