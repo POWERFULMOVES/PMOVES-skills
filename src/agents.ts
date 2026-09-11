@@ -157,6 +157,8 @@ export const agents: Record<AgentType, AgentConfig> = {
     displayName: 'Claude Code',
     skillsDir: '.claude/skills',
     globalSkillsDir: join(claudeHome, 'skills'),
+    // Preserve the established project-install behavior from #1138 and #1607.
+    createProjectSkillsDirByDefault: true,
     detectInstalled: async () => {
       return existsSync(claudeHome);
     },
