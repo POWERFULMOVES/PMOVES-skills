@@ -7,8 +7,16 @@ mirrored into the fork so any harness (Claude, Codex, Cursor, +72) installs
 them via `npx skills add POWERFULMOVES/PMOVES-skills`.
 
 ## One-time copy (from profile → fork)
-Profile root: `C:/Users/elder/AppData/Local/hermes/profiles/pmoves-hermes-elder/skills`
-Fork skills dir: `skills/PMOVES-skills/skills/<category>/<name>/SKILL.md`
+Profile root is PER NODE — resolve it for the machine you mirror from; never
+copy another node's absolute path (an earlier draft hardcoded Elder Melchor's,
+which is wrong on every other host):
+
+| Node class | Profile root |
+|---|---|
+| Elder Melchor (win) | `%LOCALAPPDATA%\hermes\profiles\pmoves-hermes-elder\skills` |
+| any POSIX node | `$HERMES_PROFILE_ROOT/skills` (default `~/.hermes/profiles/pmoves-hermes-elder/skills`) |
+
+Fork skills dir: `skills/<category>/<name>/SKILL.md`
 
 Priority set to mirror first:
 - `autonomous-ai-agents/hermes-agent` — the Hermes playbook
