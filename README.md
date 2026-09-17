@@ -572,6 +572,16 @@ GitHub repository and skill identifiers are sent only for repositories that GitH
 - [Trae Skills Documentation](https://docs.trae.ai/ide/skills)
 - [Vercel Agent Skills Repository](https://github.com/vercel-labs/agent-skills)
 
+## Vendored upstream boundary (PMOVES fork)
+
+`skills/comfy/upstream/*` is a **vendored freeze** of Comfy-Org/comfy-skills
+(forked @ 567506c): treat it as read-only reference. PMOVES customization
+happens in the top-level `skills/comfy/SKILL.md` and `skills/comfy-build/`
+only. When upstream moves (they iterate fast), re-vendor `upstream/`
+deliberately in its own commit and never hand-edit inside it — that boundary
+is what keeps our local-ComfyUI customizations mergeable against future
+upstream drops.
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
