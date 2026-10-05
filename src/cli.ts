@@ -143,6 +143,7 @@ ${BOLD}Add Options:${RESET}
   --subagent <names>     Install to Eve subagents (use 'root' for the root agent)
   --all                  Shorthand for --skill '*' --agent '*' -y
   --full-depth           Search all subdirectories even when a root SKILL.md exists
+  --json                 Output results as JSON (machine-readable, no ANSI codes)
 
 ${BOLD}Use Options:${RESET}
   -s, --skill <skill>    Specify the skill to use
@@ -151,10 +152,10 @@ ${BOLD}Use Options:${RESET}
 
 ${BOLD}Remove Options:${RESET}
   -g, --global           Remove from global scope
-  -a, --agent <agents>   Remove from specific agents (use '*' for all agents)
+  -a, --agent <agents>   Remove from specific agents (omit to clean all agent links)
   -s, --skill <skills>   Specify skills to remove (use '*' for all skills)
   -y, --yes              Skip confirmation prompts
-  --all                  Shorthand for --skill '*' --agent '*' -y
+  --all                  Remove every installed skill (-y implied). Do not combine with named skills.
   
 ${BOLD}Experimental Sync Options:${RESET}
   -a, --agent <agents>   Specify agents to install to (use '*' for all agents)
@@ -176,6 +177,7 @@ ${BOLD}Examples:${RESET}
   ${DIM}$${RESET} skills add vercel-labs/agent-skills -g
   ${DIM}$${RESET} skills add vercel-labs/agent-skills --agent claude-code cursor
   ${DIM}$${RESET} skills add vercel-labs/agent-skills --skill pr-review commit
+  ${DIM}$${RESET} skills add vercel-labs/agent-skills --json -y ${DIM}# JSON output${RESET}
   ${DIM}$${RESET} skills remove                        ${DIM}# interactive remove${RESET}
   ${DIM}$${RESET} skills remove web-design             ${DIM}# remove by name${RESET}
   ${DIM}$${RESET} skills rm --global frontend-design
@@ -211,10 +213,10 @@ ${BOLD}Arguments:${RESET}
 
 ${BOLD}Options:${RESET}
   -g, --global       Remove from global scope (~/) instead of project scope
-  -a, --agent        Remove from specific agents (use '*' for all agents)
+  -a, --agent        Remove from specific agents (omit to clean all agent links)
   -s, --skill        Specify skills to remove (use '*' for all skills)
   -y, --yes          Skip confirmation prompts
-  --all              Shorthand for --skill '*' --agent '*' -y
+  --all              Remove every installed skill (-y implied). Do not combine with named skills.
 
 ${BOLD}Examples:${RESET}
   ${DIM}$${RESET} skills remove                           ${DIM}# interactive selection${RESET}
@@ -352,10 +354,13 @@ async function main(): Promise<void> {
     case 'install':
     case 'a':
     case 'add': {
-      if (!inAgent) showLogo();
       const { source: addSource, options: addOpts, errors } = parseAddOptions(restArgs);
+      // JSON mode must keep stdout parseable — no logo
+      if (!inAgent && !addOpts.json) showLogo();
       if (errors.length > 0) {
         for (const error of errors) console.error(`Error: ${error}`);
+        // JSON mode promises exactly one JSON value on stdout, even here
+        if (addOpts.json) console.log('[]');
         process.exitCode = 1;
         break;
       }
