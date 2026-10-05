@@ -26,3 +26,11 @@ description: "Use when driving Pinokio apps via pterm CLI."
 
 ## PMOVES notes
 - Fork app dir: `PMOVES-pinokio/api/` (12 PMOVES apps; pmoves-crush/pinokio.js is a stub requiring ../../sources/... which is missing; pmoves-claude-code/ is EMPTY — both need repair before pterm run)
+
+## Pinokio 8 reconciliation (2026-10-05, upstream pinokiocomputer/pterm README)
+
+- Cross-platform: pterm ships via `npm install -g pterm` (axios sibling dep). Verify with `pterm version terminal` (also pinokiod, pinokio, script).
+- Refs: `pinokio://<host>:<port>/<scope>/<id>` (scope `api` = installed app under PINOKIO_HOME/api). pterm talks to the LOCAL control plane, which resolves/forwards to the target node — apps are never addressed by their ready_url.
+- Peer ops: `pterm open <url> [--peer <host|host:port|name>] [--surface browser|popup] [--preset center-small|center-medium|center-large|fullscreen]` — with --peer, URLs open from the peer node's point of view (127.0.0.1 = peer loopback).
+- Fleet: nodes WITH a local Pinokio control plane reach peers natively via refs/--peer. Containers WITHOUT a control plane (e.g. A0 sidecar) must delegate to a Pinokio-node agent instead.
+- Never pass secrets through clipboard on shared nodes.
