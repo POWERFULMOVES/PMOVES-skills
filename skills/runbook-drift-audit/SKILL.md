@@ -38,7 +38,7 @@ python3 scripts/runbook_drift.py --globs 'plans/*.md' --jev --out research/runbo
 
 ## Rules
 
-1. **The audit itself is ZERO LLM** — intelligence in the harness, not the model. `--jev` is optional frozen-weight classification (AgentJev-0.6B ONNX), never required, silent fallback to heuristics.
+1. **Zero API LLM in the audit loop** — intelligence in the harness, not the model. **Jev intent classification is PRIMARY** (operator directive 2026-10-15, brand+vision): AgentJev-0.6B int8 ONNX multiple-choice scoring head classifies every doc DRAFT/RUNBOOK/HISTORICAL by default; `--no-jev` opts out; missing runtime/model => announced fallback, never silent. Architecture: all candidates scored in ONE pass (`input_ids [num_candidates, seq_len]` + `cand_end_pos` => per-candidate logits) — the 129ms trick. Confidence < 0.5 => UNDECIDED (soft-calibrated abstention, never guesses). EvoSwarm jive: `temperatures.json` is a parameter genome — future lane consumes `geometry.swarm.meta.v1` packs, verdict telemetry feeds Controller fitness; both CHIT-signable.
 2. **Read-only against repo and network** — `make -n` dry-runs, file existence, GET-only curls with 6s cap. Never writes, never POSTs.
 3. **Never call DRIFTED without the origin/main cross-check** — v2's lesson: stale checkouts lie. Exists-on-main => UNDECIDED.
 4. **Historical lines are records, not claims** — destroyed/superseded/deprecated language is filtered (v3).
